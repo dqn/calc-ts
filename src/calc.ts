@@ -1,106 +1,178 @@
-type MakeTupleByLength<
-  Length extends number,
+type RecurseSub<T> = T extends { __rec: { __rec: infer U } }
+  ? { __rec: RecurseSub<U> }
+  : T extends { __rec: infer U }
+  ? U
+  : T;
+
+type Recurse<T> = T extends { __rec: unknown } ? Recurse<RecurseSub<T>> : T;
+
+type MakeTupleByLengthCore<
+  Length,
   Tuple extends never[] = []
 > = Tuple["length"] extends Length
   ? Tuple
-  : MakeTupleByLength<Length, [...Tuple, never]>;
+  : { __rec: MakeTupleByLengthCore<Length, [...Tuple, never]> };
 
-type DecrementTupleLength<A extends any[]> = A extends [infer _, ...infer Rest]
-  ? Rest
+type MakeTupleByLength<Length> = Extract<
+  Recurse<MakeTupleByLengthCore<Length>>,
+  never[]
+>;
+
+type DecrementTupleLength<A extends never[]> = A extends [
+  infer _,
+  ...infer Rest
+]
+  ? Extract<Rest, never[]>
   : never;
 
-type AddTupleLength<A extends any[], B extends any[]> = [...A, ...B]["length"];
+type AddTupleLength<A extends never[], B extends never[]> = [
+  ...A,
+  ...B
+]["length"];
 
-type SubTupleLength<A extends any[], B extends any[]> = 0 extends
+type SubTupleLengthCore<A extends never[], B extends never[]> = 0 extends
   | A["length"]
   | B["length"]
   ? A["length"]
-  : SubTupleLength<DecrementTupleLength<A>, DecrementTupleLength<B>>;
+  : {
+      __rec: SubTupleLengthCore<
+        DecrementTupleLength<A>,
+        DecrementTupleLength<B>
+      >;
+    };
 
-type MulTupleLength<
-  A extends any[],
-  B extends any[],
-  Result extends any[] = []
+type SubTupleLength<A extends never[], B extends never[]> = Recurse<
+  SubTupleLengthCore<A, B>
+>;
+
+type MulTupleLengthCore<
+  A extends never[],
+  B extends never[],
+  Result extends never[] = []
 > = B["length"] extends 0
   ? Result["length"]
-  : MulTupleLength<A, DecrementTupleLength<B>, [...Result, ...A]>;
+  : {
+      __rec: MulTupleLengthCore<A, DecrementTupleLength<B>, [...Result, ...A]>;
+    };
 
-type DivTupleLength<
-  A extends any[],
-  B extends any[],
-  Result extends any[] = [],
-  BOrig extends any[] = B
+type MulTupleLength<A extends never[], B extends never[]> = Recurse<
+  MulTupleLengthCore<A, B>
+>;
+
+type DivTupleLengthCore<
+  A extends never[],
+  B extends never[],
+  Result extends never[] = [],
+  BOrig extends never[] = B
 > = BOrig["length"] extends 0
   ? never
   : B["length"] extends 0
-  ? DivTupleLength<A, BOrig, [...Result, never], BOrig>
+  ? { __rec: DivTupleLengthCore<A, BOrig, [...Result, never], BOrig> }
   : A["length"] extends 0
   ? Result["length"]
-  : DivTupleLength<
-      DecrementTupleLength<A>,
-      DecrementTupleLength<B>,
-      Result,
-      BOrig
-    >;
+  : {
+      __rec: DivTupleLengthCore<
+        DecrementTupleLength<A>,
+        DecrementTupleLength<B>,
+        Result,
+        BOrig
+      >;
+    };
 
-type Add<A extends number, B extends number> = Extract<
-  AddTupleLength<MakeTupleByLength<A>, MakeTupleByLength<B>>,
-  number
+type DivTupleLength<A extends never[], B extends never[]> = Recurse<
+  DivTupleLengthCore<A, B>
 >;
 
-type Sub<A extends number, B extends number> = Extract<
-  SubTupleLength<MakeTupleByLength<A>, MakeTupleByLength<B>>,
-  number
->;
+type Add<A, B> = AddTupleLength<MakeTupleByLength<A>, MakeTupleByLength<B>>;
 
-type Mul<A extends number, B extends number> = Extract<
-  MulTupleLength<MakeTupleByLength<A>, MakeTupleByLength<B>>,
-  number
->;
+type Sub<A, B> = SubTupleLength<MakeTupleByLength<A>, MakeTupleByLength<B>>;
 
-type Div<A extends number, B extends number> = Extract<
-  DivTupleLength<MakeTupleByLength<A>, MakeTupleByLength<B>>,
-  number
->;
+type Mul<A, B> = MulTupleLength<MakeTupleByLength<A>, MakeTupleByLength<B>>;
+
+type Div<A, B> = DivTupleLength<MakeTupleByLength<A>, MakeTupleByLength<B>>;
 
 type Operator = "+" | "-" | "*" | "/" | "(" | ")";
 
-type Token = { type: Operator } | { type: "number"; value: number };
-
 type CarryUp<N> = N extends number ? Mul<N, 10> : 0;
 
-type NumberMap = {
-  "0": 0;
-  "1": 1;
-  "2": 2;
-  "3": 3;
-  "4": 4;
-  "5": 5;
-  "6": 6;
-  "7": 7;
-  "8": 8;
-  "9": 9;
-};
+type TokenizeWithNumber<
+  Rest extends string,
+  Tokens extends any[],
+  Value,
+  Digit extends number
+> = TokenizeCore<Rest, Tokens, Add<CarryUp<Value>, Digit>>;
 
-type Tokenize<
+type TokenizeWithOperator<
+  Rest extends string,
+  Tokens extends any[],
+  Value,
+  Op extends Operator
+> = TokenizeCore<
+  Rest,
+  [
+    ...Tokens,
+    ...(Value extends number ? [{ type: "number"; value: Value }] : []),
+    { type: Op }
+  ]
+>;
+
+type TokenizeCore<
   S extends string,
-  Tokens extends Token[] = [],
-  Value extends number | null = null
-> = S extends `${infer C}${infer Rest}`
-  ? C extends keyof NumberMap
-    ? Tokenize<Rest, Tokens, Add<CarryUp<Value>, NumberMap[C]>>
-    : Value extends number
-    ? Tokenize<S, [...Tokens, { type: "number"; value: Value }]>
-    : C extends Operator
-    ? Tokenize<Rest, [...Tokens, { type: C }]>
-    : C extends " "
-    ? Tokenize<Rest, Tokens>
-    : never
-  : Value extends number
-  ? [...Tokens, { type: "number"; value: Value }]
-  : Tokens;
+  Tokens extends any[] = [],
+  Value = null
+> = S extends `0${infer Rest}`
+  ? { __rec: TokenizeWithNumber<Rest, Tokens, Value, 0> }
+  : S extends `1${infer Rest}`
+  ? { __rec: TokenizeWithNumber<Rest, Tokens, Value, 1> }
+  : S extends `2${infer Rest}`
+  ? { __rec: TokenizeWithNumber<Rest, Tokens, Value, 2> }
+  : S extends `3${infer Rest}`
+  ? { __rec: TokenizeWithNumber<Rest, Tokens, Value, 3> }
+  : S extends `4${infer Rest}`
+  ? { __rec: TokenizeWithNumber<Rest, Tokens, Value, 4> }
+  : S extends `5${infer Rest}`
+  ? { __rec: TokenizeWithNumber<Rest, Tokens, Value, 5> }
+  : S extends `6${infer Rest}`
+  ? { __rec: TokenizeWithNumber<Rest, Tokens, Value, 6> }
+  : S extends `7${infer Rest}`
+  ? { __rec: TokenizeWithNumber<Rest, Tokens, Value, 7> }
+  : S extends `8${infer Rest}`
+  ? { __rec: TokenizeWithNumber<Rest, Tokens, Value, 8> }
+  : S extends `9${infer Rest}`
+  ? { __rec: TokenizeWithNumber<Rest, Tokens, Value, 9> }
+  : S extends `+${infer Rest}`
+  ? { __rec: TokenizeWithOperator<Rest, Tokens, Value, "+"> }
+  : S extends `-${infer Rest}`
+  ? { __rec: TokenizeWithOperator<Rest, Tokens, Value, "-"> }
+  : S extends `*${infer Rest}`
+  ? { __rec: TokenizeWithOperator<Rest, Tokens, Value, "*"> }
+  : S extends `/${infer Rest}`
+  ? { __rec: TokenizeWithOperator<Rest, Tokens, Value, "/"> }
+  : S extends `(${infer Rest}`
+  ? { __rec: TokenizeWithOperator<Rest, Tokens, Value, "("> }
+  : S extends `)${infer Rest}`
+  ? { __rec: TokenizeWithOperator<Rest, Tokens, Value, ")"> }
+  : S extends ` ${infer Rest}`
+  ? {
+      __rec: TokenizeCore<
+        Rest,
+        [
+          ...Tokens,
+          ...(Value extends number ? [{ type: "number"; value: Value }] : [])
+        ]
+      >;
+    }
+  : S extends ""
+  ? Value extends number
+    ? [...Tokens, { type: "number"; value: Value }]
+    : Tokens
+  : never;
 
-type Parse<Tokens extends Token[]> = Expr<Tokens> extends [
+type Tokenize<S extends string> = Recurse<TokenizeCore<S>> extends infer R
+  ? Extract<R, unknown[]>
+  : never;
+
+type Parse<Tokens extends unknown[]> = Expr<Tokens> extends [
   infer Result,
   infer Rest
 ]
@@ -109,28 +181,34 @@ type Parse<Tokens extends Token[]> = Expr<Tokens> extends [
     : never
   : never;
 
-type ASTNode =
-  | { type: Exclude<Operator, "(" | ")">; lhs: ASTNode; rhs: ASTNode }
-  | { type: "number"; value: number };
-
 type ExprLoop<AST, Tokens> = Tokens extends [{ type: "+" | "-" }, ...infer Rest]
   ? Term<Rest> extends [infer Result, infer Rest]
-    ? ExprLoop<{ type: Tokens[0]["type"]; lhs: AST; rhs: Result }, Rest>
+    ? {
+        __rec: ExprLoop<
+          { type: Tokens[0]["type"]; lhs: AST; rhs: Result },
+          Rest
+        >;
+      }
     : never
   : [AST, Tokens];
 
 type Expr<Tokens> = Term<Tokens> extends [infer Result, infer Rest]
-  ? ExprLoop<Result, Rest>
+  ? Recurse<ExprLoop<Result, Rest>>
   : never;
 
 type TermLoop<AST, Tokens> = Tokens extends [{ type: "*" | "/" }, ...infer Rest]
   ? Primary<Rest> extends [infer Result, infer Rest]
-    ? TermLoop<{ type: Tokens[0]["type"]; lhs: AST; rhs: Result }, Rest>
+    ? {
+        __rec: TermLoop<
+          { type: Tokens[0]["type"]; lhs: AST; rhs: Result },
+          Rest
+        >;
+      }
     : never
   : [AST, Tokens];
 
 type Term<Tokens> = Primary<Tokens> extends [infer Result, infer Rest]
-  ? TermLoop<Result, Rest>
+  ? Recurse<TermLoop<Result, Rest>>
   : never;
 
 type Primary<Tokens> = Tokens extends [
@@ -146,37 +224,14 @@ type Primary<Tokens> = Tokens extends [
 
 type Eval<A> = A extends { type: "number"; value: number }
   ? A["value"]
-  : A extends { type: infer Type; lhs: infer LHS; rhs: infer RHS }
-  ? Type extends "+"
-    ? Add<Eval<LHS>, Eval<RHS>>
-    : Type extends "-"
-    ? Sub<Eval<LHS>, Eval<RHS>>
-    : Type extends "*"
-    ? Mul<Eval<LHS>, Eval<RHS>>
-    : Type extends "/"
-    ? Div<Eval<LHS>, Eval<RHS>>
-    : never
+  : A extends { type: "+"; lhs: infer LHS; rhs: infer RHS }
+  ? Add<Eval<LHS>, Eval<RHS>>
+  : A extends { type: "-"; lhs: infer LHS; rhs: infer RHS }
+  ? Sub<Eval<LHS>, Eval<RHS>>
+  : A extends { type: "*"; lhs: infer LHS; rhs: infer RHS }
+  ? Mul<Eval<LHS>, Eval<RHS>>
+  : A extends { type: "/"; lhs: infer LHS; rhs: infer RHS }
+  ? Div<Eval<LHS>, Eval<RHS>>
   : never;
 
 export type Calculate<S extends string> = Eval<Parse<Tokenize<S>>>;
-
-type Result1 = Calculate<"1 + 2">; // 3
-type Result2 = Calculate<"1+2+3-4">; // 2
-type Result3 = Calculate<"2 * (7 + (8))">; // 30
-type Result4 = Calculate<"5 - / 9">; // never
-
-const num1: Calculate<"1 + 4 / (3 - 1)"> = 3; // OK
-const num2: Calculate<"1 + 4 / (3 - 1)"> = 2; // Type '2' is not assignable to type '3'.ts(2322)
-
-type ValidExpr<S extends string> = Calculate<S> extends never ? never : S;
-
-function safeEval<S extends string>(expr: ValidExpr<S>): Calculate<S> {
-  return eval(expr);
-}
-
-const result1 = safeEval("12 + 3"); // 15
-const result2 = safeEval("12 = 3"); // Argument of type 'string' is not assignable to parameter of type 'never'.ts(2345)
-
-declare const unknownString: string;
-
-const result3 = safeEval(unknownString);
