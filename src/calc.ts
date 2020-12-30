@@ -112,7 +112,7 @@ type TokenizeWithOperator<
   [
     ...Tokens,
     ...(Value extends number ? [{ type: "number"; value: Value }] : []),
-    { type: Op }
+    { type: Op },
   ]
 >;
 
@@ -174,7 +174,7 @@ type Tokenize<S extends string> = Recurse<TokenizeCore<S>> extends infer R
 
 type Parse<Tokens extends unknown[]> = Expr<Tokens> extends [
   infer Result,
-  infer Rest
+  infer Rest,
 ]
   ? Rest extends { length: 0 }
     ? Result
