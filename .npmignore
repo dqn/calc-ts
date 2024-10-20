@@ -1,8 +1,0 @@
-.github/
-node_modules/
-src/
-.gitignore
-.prettierrc
-renovate.json
-tsconfig.json
-yarn.lock
